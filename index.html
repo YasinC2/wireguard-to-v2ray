@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>تبدیل فایل WireGuard به لینک</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="shortcut icon" href="favicon.svg" type="image/svg+xml">
+  
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- فونت Vazirmatn -->
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Vazirmatn', sans-serif;
+      background-color: #f9fafb;
+    }
+
+    .drop-zone {
+      transition: all 0.3s ease;
+    }
+
+    .drop-zone.dragover {
+      border-color: #3b82f6;
+      background-color: #e0f2fe;
+    }
+
+    pre {
+      direction: ltr;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body class="min-h-screen py-10 px-4 md:px-10">
+
+  <div class="max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md">
+    <h1 class="text-2xl font-bold mb-4 text-blue-700">
+        🔗 تبدیل فایل‌های WireGuard به لینک
+        <span class="text-base text-blue-500">
+            برای استفاده در V2Ray
+        </span>
+    </h1>
+
+    <!-- Drop Zone -->
+    <div id="dropZone" class="drop-zone border-2 border-dashed border-gray-300 p-6 rounded-lg text-center cursor-pointer hover:border-blue-400 bg-gray-50 mb-2">
+      <p class="text-gray-500">برای بارگذاری فایل‌ها کلیک کنید یا آن‌ها را اینجا بکشید و رها کنید</p>
+      <input type="file" id="fileInput" multiple accept=".conf" class="hidden">
+    </div>
+
+    <!-- نمایش فایل‌ها -->
+    <div id="fileList" class="text-sm text-gray-600 mb-4"></div>
+
+    <!-- دکمه‌ها -->
+    <div class="flex gap-4 mb-4">
+      <button onclick="convertFiles()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow">تبدیل فایل‌ها</button>
+      <button onclick="copyLinks()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow">📋 کپی همه لینک‌ها</button>
+    </div>
+
+    <!-- نوار پیام -->
+    <div id="messageBox" class="hidden mb-4 px-4 py-3 rounded relative text-sm"></div>
+
+    <!-- خروجی -->
+    <h2 class="font-semibold text-gray-700 mb-2">لینک‌های ساخته شده:</h2>
+    <pre id="output" class="bg-gray-100 p-4 rounded-lg text-sm text-gray-800 h-64 overflow-auto"></pre>
+  </div>
+
+  <script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const output = document.getElementById('output');
+    const fileList = document.getElementById('fileList');
+    const messageBox = document.getElementById('messageBox');
+
+    // Handle click
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    // Handle drag & drop
+    dropZone.addEventListener('dragover', e => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragover');
+    });
+
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      fileInput.files = e.dataTransfer.files;
+      showFileList();
+    });
+
+    fileInput.addEventListener('change', showFileList);
+
+    function showFileList() {
+      const files = fileInput.files;
+      if (!files.length) {
+        fileList.innerHTML = '';
+        return;
+      }
+
+      const items = Array.from(files).map(f => `📄 ${f.name}`).join('<br>');
+      fileList.innerHTML = `<strong>${files.length} فایل انتخاب شده:</strong><br>${items}`;
+    }
+
+    function parseConf(text) {
+      const priv = (text.match(/PrivateKey\s*=\s*(.+)/) || [])[1];
+      const pub = (text.match(/PublicKey\s*=\s*(.+)/) || [])[1];
+      const addr = (text.match(/Address\s*=\s*(.+)/) || [])[1];
+      const mtu = (text.match(/MTU\s*=\s*(\d+)/) || [])[1] || '1420';
+      const endpoint = (text.match(/Endpoint\s*=\s*(.+)/) || [])[1];
+
+      if (!priv || !pub || !addr || !endpoint) return null;
+
+      const encodedPriv = encodeURIComponent(priv);
+      const encodedPub = encodeURIComponent(pub);
+      const encodedAddr = encodeURIComponent(addr);
+
+      return `wireguard://${encodedPriv}@${endpoint}?address=${encodedAddr}&publickey=${encodedPub}&mtu=${mtu}`;
+    }
+
+    async function convertFiles() {
+        clearMessage();
+        const files = fileInput.files;
+        output.textContent = '';
+
+        if (!files.length) {
+            showMessage("هیچ فایلی انتخاب نشده است.", "error");
+            return;
+        }
+
+        const links = [];
+
+        for (const file of files) {
+            const text = await file.text();
+            const link = parseConf(text);
+            if (!link) {
+            showMessage(`❌ فایل «${file.name}» ناقص یا نامعتبر است. عملیات متوقف شد.`, "error");
+            output.textContent = '';
+            return;
+            }
+            links.push(link + `#${file.name.replace('.conf', '')}`);
+        }
+
+        output.textContent = links.join('\n\n');
+        showMessage("✅ تبدیل فایل‌ها با موفقیت انجام شد.", "success");
+    }
+
+
+    function copyLinks() {
+      clearMessage();
+      const text = output.textContent;
+      if (!text.trim()) {
+        showMessage("⚠️ لینکی برای کپی وجود ندارد.", "error");
+        return;
+      }
+
+      navigator.clipboard.writeText(text)
+        .then(() => showMessage("✅ لینک‌ها با موفقیت کپی شدند.", "success"))
+        .catch(() => showMessage("❌ خطا در کپی کردن!", "error"));
+    }
+
+    function showMessage(text, type = "info") {
+      messageBox.classList.remove("hidden");
+      messageBox.innerHTML = `
+        <span class="block">${text}</span>
+        <button onclick="clearMessage()" class="absolute top-2 left-2 text-xl text-gray-500 w-7 hover:text-black hover:bg-black/10 rounded">&times;</button>
+      `;
+
+      messageBox.className = "mb-4 px-4 py-3 rounded relative text-sm";
+
+      switch (type) {
+        case "success":
+          messageBox.classList.add("bg-green-100", "text-green-800", "border", "border-green-300");
+          break;
+        case "error":
+          messageBox.classList.add("bg-red-100", "text-red-800", "border", "border-red-300");
+          break;
+        case "info":
+        default:
+          messageBox.classList.add("bg-blue-100", "text-blue-800", "border", "border-blue-300");
+          break;
+      }
+    }
+
+    function clearMessage() {
+      messageBox.className = "hidden";
+      messageBox.innerHTML = "";
+    }
+  </script>
+</body>
+</html>
