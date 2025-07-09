@@ -111,11 +111,14 @@
     function parseConf(text) {
       const priv = (text.match(/PrivateKey\s*=\s*(.+)/) || [])[1];
       const pub = (text.match(/PublicKey\s*=\s*(.+)/) || [])[1];
-      const addr = (text.match(/Address\s*=\s*(.+)/) || [])[1];
+      let addr = (text.match(/Address\s*=\s*(.+)/) || [])[1];
       const mtu = (text.match(/MTU\s*=\s*(\d+)/) || [])[1] || '1420';
       const endpoint = (text.match(/Endpoint\s*=\s*(.+)/) || [])[1];
 
       if (!priv || !pub || !addr || !endpoint) return null;
+
+      // ✅ حذف فاصله‌های بعد از کاما
+      addr = addr.replace(/,\s+/g, ',');
 
       const encodedPriv = encodeURIComponent(priv);
       const encodedPub = encodeURIComponent(pub);
